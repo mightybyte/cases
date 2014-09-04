@@ -1,3 +1,6 @@
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 module Cases
 (
   -- * Processor
@@ -19,11 +22,12 @@ module Cases
 )
 where
 
-import Cases.Prelude hiding (Word)
+import           Control.Applicative 
+import           Data.Maybe 
+import           Data.Monoid 
 import qualified Data.Attoparsec.Text as A
-import qualified Data.Text as TS
 import qualified Data.Char as C
-
+import qualified Data.Text as TS
 
 -- * Part
 -------------------------
@@ -70,9 +74,9 @@ partParser = titleParser <|> upperParser <|> lowerParser <|> digitsParser
 -- |
 -- A parser, which does in-place processing, using the supplied 'Folder'.
 partsParser :: Monoid r => Folder r -> A.Parser r
-partsParser fold = loop mempty where
+partsParser folder = loop mempty where
   loop r = 
-    (partParser >>= loop . fold r) <|> 
+    (partParser >>= loop . folder r) <|> 
     (A.anyChar *> loop r) <|>
     (A.endOfInput *> pure r)
 
@@ -113,7 +117,7 @@ lower = \case
     t' = case c of
       Title -> TS.uncons t |> \case
         Nothing -> t
-        Just (h, t) -> TS.cons (C.toLower h) t
+        Just (h, t2) -> TS.cons (C.toLower h) t2
       Upper -> TS.toLower t
       Lower -> t
   p -> p
@@ -124,7 +128,7 @@ upper = \case
     t' = case c of
       Title -> TS.uncons t |> \case
         Nothing -> t
-        Just (h, t) -> TS.cons h (TS.toUpper t)
+        Just (h, t2) -> TS.cons h (TS.toUpper t2)
       Upper -> t
       Lower -> TS.toUpper t
   p -> p
@@ -136,10 +140,10 @@ title = \case
       Title -> t
       Upper -> TS.uncons t |> \case
         Nothing -> t  
-        Just (h, t) -> TS.cons (C.toUpper h) (TS.toLower t)
+        Just (h, t2) -> TS.cons (C.toUpper h) (TS.toLower t2)
       Lower -> TS.uncons t |> \case
         Nothing -> t
-        Just (h, t) -> TS.cons (C.toUpper h) t
+        Just (h, t2) -> TS.cons (C.toUpper h) t2
   p -> p
 
 
@@ -154,7 +158,7 @@ title = \case
 process :: CaseTransformer -> Delimiter -> TS.Text -> TS.Text
 process tr fo = 
   fromMaybe "" .
-  either ($bug . ("Parse failure: " <>)) id .
+  either (error . ("Cases parse failure: " <>)) id .
   A.parseOnly (partsParser $ (. tr) . fo)
 
 -- |
@@ -178,4 +182,8 @@ snakify = process lower snake
 -- Same as @('process' 'id' 'camel')@.
 camelize :: TS.Text -> TS.Text
 camelize = process id camel
+
+(|>) :: a -> (a -> b) -> b
+a |> aToB = aToB a
+{-# INLINE (|>) #-}
 
